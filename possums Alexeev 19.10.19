@@ -1,0 +1,10 @@
+library(possum)
+corr <- cor(possum$hdlngth, possum$belly)
+corr_test <- cor.test(possum$hdlngth, possum$belly)
+corr_test
+#pvalue < 0.05, можем отвергнуть гипотезу о равенстве коэф кор нулю, значит есть связь между двумя параметр
+
+library(dyplr)
+median_tail <- median(possum$taill)
+mutate(possum, median_tail)
+result <- subset(possum, median_tail == max(median_tail))
