@@ -1,0 +1,222 @@
+---
+title: "Molluscs report"
+date: "11/8/2019"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(data.table)
+```
+
+## Data preparation
+
+To collect all data from different expeditions an rbindlist function was used to compile all .csv files from different years. 
+
+```{r}
+filenames <- list.files("~/R/Statistics-and-R-programming/data/Data/", 
+                        pattern="*.csv", full.names=TRUE)
+data <- rbindlist(lapply(filenames,fread))
+```
+
+After the transformation above we got a dataframe, which contains 4176 observations of 9 variables: 
+```{r, echo=FALSE} 
+str(data)
+```
+
+As we can already see, some data categories have wrong structure variables. This is due to incorrect format of variables in some columns such as Sex, Length and Rings.
+
+Sex column contains variables of following levels: 
+
+```{r, echo=FALSE} 
+head(as.factor(data$`Sex (1 – male, 2 – female, 3 – uvenil)`))
+```
+
+Thus we should replace levels 'male', 'one' and 'three' with a numeric variables and encode Sex vector as a factor using commands below:
+
+```{r}
+data$`Sex (1 – male, 2 – female, 3 – uvenil)` <- 
+  gsub(data$`Sex (1 – male, 2 – female, 3 – uvenil)`, pattern = "male", replacement = 1)
+data$`Sex (1 – male, 2 – female, 3 – uvenil)` <- 
+  gsub(data$`Sex (1 – male, 2 – female, 3 – uvenil)`, pattern = "one", replacement = 1)
+data$`Sex (1 – male, 2 – female, 3 – uvenil)` <-
+  gsub(data$`Sex (1 – male, 2 – female, 3 – uvenil)`, pattern = "three", replacement = 3)
+data$`Sex (1 – male, 2 – female, 3 – uvenil)` <- 
+  as.factor(data$`Sex (1 – male, 2 – female, 3 – uvenil)`)
+```
+
+For Rings column we can see 'nine' string among other numeric values:
+
+```{r}
+head(as.factor(data$Rings))
+```
+
+Just as in previous case we replace string with a proper number and encode a vector as a factor:
+
+```{r}
+data$Rings <- gsub(data$Rings, pattern = 'nine', replacement = 9)
+data$Rings <- as.factor(data$Rings)
+```
+
+Length columns contains string 'No data! I forgot to mesure it!(':
+
+```{r}
+head(as.factor(data$Length))
+```
+
+Unfortunately, this string cannot be removed by gsub function, so we have to use following command to replace it with a column mean:
+
+```{r, message=FALSE}
+data$Length <- as.numeric(data$Length)
+mean(data$Length, na.rm = TRUE) -> 
+  data$Length[grep(pattern = 'No data! I forgot to mesure it!', data$Length)]
+```
+
+For the next step we have to deal with NA's in our dataframe. To preserve as many data as possible we can replace NA's with mean values in numeric columns. However, we should remove all the rows, containing NA's in factor variables.
+
+```{r}
+data <- data[complete.cases(data$`Sex (1 – male, 2 – female, 3 – uvenil)`), ]
+data <- data[complete.cases(data$Rings), ]
+data <- mutate(data, 
+               Length = ifelse(is.na(Length), mean(Length, na.rm = TRUE), Length))
+data <- mutate(data, 
+               Diameter = ifelse(is.na(Diameter), mean(Diameter, na.rm = TRUE), Diameter))
+data <- mutate(data, 
+               Height = ifelse(is.na(Height), mean(Height, na.rm = TRUE), Height))
+data <- mutate(data, 
+               Whole_weight = ifelse(is.na(Whole_weight), 
+                                           mean(Whole_weight, na.rm = TRUE), Whole_weight))
+data <- mutate(data, 
+               Shucked_weight = 
+                 ifelse(is.na(Shucked_weight), mean(Shucked_weight, na.rm = TRUE), Shucked_weight))
+data <- mutate(data, 
+               Viscera_weight = 
+                 ifelse(is.na(Viscera_weight), mean(Viscera_weight, na.rm = TRUE), Viscera_weight))
+data <- mutate(data, 
+               Shell_weight = 
+                 ifelse(is.na(Shell_weight), mean(Shell_weight, na.rm = TRUE), Shell_weight))
+```
+
+## Decriptive statistics
+
+Now as we finished data filtration we can calculate some descriptive statistics. To find mean and standart deviation of Length column I used command:
+
+```{r}
+length_mean_sd <- data %>% group_by(`Sex (1 – male, 2 – female, 3 – uvenil)`) %>% 
+  summarise(mean = mean(Length), sd = sd(Length))
+```
+
+Here you can see mean and sd for each Sex group:
+```{r, echo=FALSE}
+length_mean_sd
+```
+
+To find relative amount of samples with Height <= 0.165 I filtered dataframe and diveded number of samples in filtered df on all samples:
+
+```{r}
+little <- data %>% filter(Height <= 0.165)
+little_relative <- round(nrow(little)/nrow(data), 2)*100
+```
+
+This I got `r little_relative`% of all samples with Height <= 0.165.
+
+To find Length value higher than of 92% of samples i used quantile function:
+
+```{r}
+quantile(data$Length, probs = 0.92)
+```
+
+Border value for 92% of samples is 0.67
+
+Z scores for Length variable were performed usung scale function:
+
+```{r}
+Length_z_scores <- scale(data$Length)
+head(Length_z_scores)
+```
+
+## Comparing of two variables
+
+To compare Length distribution between groups with 5 and 15 rings I used T-test. However, in order to use it we have to check those groups for normality of Length distribution. It is convinient to build distribution plots and QQ-plots for both groups.
+
+```{r}
+rings1 <- data %>% filter(Rings == 5)
+rings2 <- data %>% filter(Rings == 15)
+
+plot1 <- ggplot(rings1, aes(Diameter))+geom_density() + theme_bw()
+plot1
+qqnorm(rings1$Diameter)
+qqline(rings1$Diameter)
+
+plot2 <- ggplot(rings2, aes(Diameter))+geom_density() + theme_bw()
+plot2
+qqnorm(rings2$Diameter)
+qqline(rings2$Diameter)
+```
+
+On the resulting charts we see distribution close to normal in both instances. To be sure we gonna perform Shapiro-Wilcko test for normality:
+
+```{r}
+shapiro.test(rings1$Diameter)
+shapiro.test(rings2$Diameter)
+```
+
+Both groups have p.value > 0.05, which means normal distribution. Now when we proved normality for both groups we can perform T-test:
+
+```{r}
+rings_full <- rbind(rings1, rings2)
+rings_full$Rings <- as.factor(rings_full$Rings)
+t.test_results <- t.test(Diameter ~ Rings, data = rings_full)
+t.test_results
+```
+
+T-test showed that group's means of Diameter statistically differ with p.value = `r t.test_results$p.value`. It can be visualised with box plot:
+
+```{r}
+ggplot(rings_full, aes(x = Rings, y = Diameter)) +
+  geom_boxplot()
+```
+
+## Correlation test
+
+Correlation between Diameter and Whole_weight can be investigated using Pearson's correlation test. However, it has two neccessary conditions:
+    + linear and monotone fashion of correlation
+    + normal distribution of both variables
+
+To check linear connection between two groups I used correlation plot:
+
+```{r}
+ggplot(data, aes(Diameter, Whole_weight))+geom_point()+geom_smooth(method = "lm")
+```
+
+On produced graph linear and positive correlation occur. Now we check Diameter and Whole_weight for normality:
+
+```{r}
+ggplot(data, aes(Diameter)) + geom_density() + theme_bw()
+ggplot(data, aes(Whole_weight)) + geom_density() + theme_bw()
+```
+
+On both density graphs we can observe skews, though graphs tend to be normal. Shapiro-Wilcko test produces following results:
+
+```{r}
+shapiro.test(data$Diameter)
+shapiro.test(data$Whole_weight)
+```
+
+p.value in both instances in way less than 0.05. Thus here I performed non-parametric analagous Spearman's correlation test:
+
+```{r}
+cor.test(data$Diameter, data$Whole_weight, method = 'spearman', exact = FALSE)
+```
+
+Still we observe strong positive correlation with p.value < 0.05.
+
+Hope that was usefull for your research!
